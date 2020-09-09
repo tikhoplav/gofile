@@ -1,14 +1,32 @@
 package main
 
 import (
-	"github.com/valyala/fasthttp"
+	"flag"
 	"fmt"
 )
 
 func main() {
-	fasthttp.ListenAndServe(":80", handleHttpRequest)
-}
+	var port, maxFileSize int
+	var host, rootDir string
 
-func handleHttpRequest(ctx *fasthttp.RequestCtx) {
-	fmt.Fprintf(ctx, "Hello, World!")
+	flag.StringVar(&host, "h", "", "Host to bind a server")
+	flag.IntVar(&port, "p", 80, "Port to bind a server")
+	flag.IntVar(&maxFileSize, "m", 5<<10, "Maximum file size in Kb")
+	flag.StringVar(&rootDir, "d", "/data", "Root file storage directory")
+
+	f := "Starting server at %s:%v\n" +
+		 "File storage directory: %s\n" +
+		 "Maximum file size is set to: %vK\n"
+	fmt.Printf(f, host, port, rootDir, maxFileSize)
+
+	server := &Server{
+		rootDir: rootDir,
+		maxFileSize: maxFileSize << 13, // Kb Converted to bits
+	}
+
+	// Convert host and port to address string to bind server
+	// If used with Docker, do not specify any host or set it to 0.0.0.0
+	addr := fmt.Sprintf("%s:%v", host, port)
+
+	server.Serve(addr)
 }
