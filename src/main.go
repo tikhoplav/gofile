@@ -6,12 +6,13 @@ import (
 )
 
 func main() {
-	var port, maxFileSize int
+	var port int
+	var maxFileSize int64
 	var host, rootDir string
 
 	flag.StringVar(&host, "h", "", "Host to bind a server")
 	flag.IntVar(&port, "p", 80, "Port to bind a server")
-	flag.IntVar(&maxFileSize, "m", 5<<10, "Maximum file size in Kb")
+	flag.Int64Var(&maxFileSize, "m", 5<<10, "Maximum file size in Kb")
 	flag.StringVar(&rootDir, "d", "/data", "Root file storage directory")
 
 	f := "Starting server at %s:%v\n" +

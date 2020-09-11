@@ -9,6 +9,6 @@ services:
     volumes:
       - ./src:/src
       - ./pkg:/go/pkg
-      - ./tmp:/tmp
+      - ./data:/data
     ports:
       - 80:80
