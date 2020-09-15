@@ -4,7 +4,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"strings"
 	"bytes"
-	// "fmt"
 	"os"
 	"io/ioutil"
 )
@@ -19,32 +18,43 @@ var (
 type Server struct {
 	rootDir string
 	maxFileSize int64
+	showIndex bool
+	fileHandler fasthttp.RequestHandler
 }
 
 func (s *Server) Serve(addr string) {
 	h := &fasthttp.Server{
 		Handler: s.handleRequest,
-		// This is set to prevent preparse request denial
+		// This is set to prevent preparse request denial.
 		// fasthttp.Server will reject all request exceeding this limit
-		// Without any proper error description
+		// Without any proper error description.
 		MaxRequestBodySize: int(s.maxFileSize * 2),
 	}
+
+	fs := &fasthttp.FS{
+		Root: s.rootDir,
+		GenerateIndexPages: s.showIndex,
+		Compress: true,
+	}
+
+	s.fileHandler = fs.NewRequestHandler()
+
 	h.ListenAndServe(addr)
 }
 
 func (s *Server) handleRequest(ctx *fasthttp.RequestCtx) {	
 	var method = ctx.Method()
-
+	
 	if bytes.Equal(method, GET) {
-		s.serveFile(ctx)
+		s.fileHandler(ctx)
 		return
 	}
-
+	
 	if bytes.Equal(method, POST) || bytes.Equal(method, PUT) {
 		s.receiveFile(ctx)
 		return
 	}
-
+	
 	if bytes.Equal(method, DELETE) {
 		s.deleteFile(ctx)
 		return
@@ -53,8 +63,20 @@ func (s *Server) handleRequest(ctx *fasthttp.RequestCtx) {
 	ctx.Error("Method Not Allowed", 405)
 }
 
-func (s *Server) serveFile(ctx *fasthttp.RequestCtx) {
-	ctx.Write([]byte("This is get"))
+// Returns full path, directory and file name from request path.
+// Uses server's rootDir as the base for path string.
+// File name is determined by last slash character.
+func (s *Server) parsePath(ctx *fasthttp.RequestCtx) (string, string, string) {
+	var b strings.Builder
+
+	b.WriteString(s.rootDir)
+	b.Write(ctx.Path())
+
+	path := b.String()
+	fileName := path[strings.LastIndex(path, "/"):]
+	dir := path[:strings.LastIndex(path, "/")]
+	
+	return path, fileName, dir
 }
 
 // Receives and saves file from input.
@@ -76,16 +98,9 @@ func (s *Server) receiveFile(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Prepare all directories if required
-	// Name of the file separated by last `/` sign
-	var b strings.Builder
-	b.WriteString(s.rootDir)
-	b.Write(ctx.Path())
+	path, _, dir := s.parsePath(ctx)
 
-	path := b.String()
-	dirs := path[:strings.LastIndex(path, "/")]
-
-	err = os.MkdirAll(dirs, os.ModePerm)
+	err = os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
 		ctx.Error(err.Error(), 500)
 	}
@@ -100,14 +115,11 @@ func (s *Server) receiveFile(ctx *fasthttp.RequestCtx) {
 	ctx.SetBody([]byte("ok"))
 }
 
-// Deletes file determined by request path
-// Does not allow to delete folders manually
+// Deletes file determined by request path.
+// Does not allow to delete folders,
+// But clears all empty folders in the file path.
 func (s *Server) deleteFile(ctx *fasthttp.RequestCtx) {
-	var b strings.Builder
-	b.WriteString(s.rootDir)
-	b.Write(ctx.Path())
-
-	path := b.String()
+	path, _, dir := s.parsePath(ctx)
 
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -126,13 +138,13 @@ func (s *Server) deleteFile(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Clean all empty directories recursive at background
-	dirs := path[:strings.LastIndex(path, "/")]
-	go cleanDirs(dirs)
+	// Clean all empty directories recursively at background.
+	go cleanDirs(dir)
 
 	ctx.SetBody([]byte("ok"))
 }
 
+// Recursively removes all empty folders.
 func cleanDirs(path string) {
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
