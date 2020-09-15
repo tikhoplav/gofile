@@ -6,6 +6,7 @@ import (
 	"bytes"
 	// "fmt"
 	"os"
+	"io/ioutil"
 )
 
 var (
@@ -43,6 +44,11 @@ func (s *Server) handleRequest(ctx *fasthttp.RequestCtx) {
 		s.receiveFile(ctx)
 		return
 	}
+
+	if bytes.Equal(method, DELETE) {
+		s.deleteFile(ctx)
+		return
+	}
 	
 	ctx.Error("Method Not Allowed", 405)
 }
@@ -57,7 +63,6 @@ func (s *Server) serveFile(ctx *fasthttp.RequestCtx) {
 // it creates all necessary nested folder under the root dir.
 func (s *Server) receiveFile(ctx *fasthttp.RequestCtx) {	
 	header, err := ctx.FormFile("file")
-
 	if err != nil {
 		ctx.Error(err.Error(), 400)
 		return
@@ -81,18 +86,68 @@ func (s *Server) receiveFile(ctx *fasthttp.RequestCtx) {
 	dirs := path[:strings.LastIndex(path, "/")]
 
 	err = os.MkdirAll(dirs, os.ModePerm)
-
 	if err != nil {
 		ctx.Error(err.Error(), 500)
 	}
 
 	// Write the file
 	err = fasthttp.SaveMultipartFile(header, path)
-
 	if err != nil {
 		ctx.Error(err.Error(), 500)
 		return
 	}
 
 	ctx.SetBody([]byte("ok"))
+}
+
+// Deletes file determined by request path
+// Does not allow to delete folders manually
+func (s *Server) deleteFile(ctx *fasthttp.RequestCtx) {
+	var b strings.Builder
+	b.WriteString(s.rootDir)
+	b.Write(ctx.Path())
+
+	path := b.String()
+
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		ctx.Error("Not exists", 404)
+		return
+	}
+
+	if info.IsDir() {
+		ctx.Error("Target is a directory", 400)
+		return
+	}
+
+	err = os.Remove(path)
+	if err != nil {
+		ctx.Error(err.Error(), 500)
+		return
+	}
+
+	// Clean all empty directories recursive at background
+	dirs := path[:strings.LastIndex(path, "/")]
+	go cleanDirs(dirs)
+
+	ctx.SetBody([]byte("ok"))
+}
+
+func cleanDirs(path string) {
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		return
+	}
+
+	if len(files) > 0 {
+		return
+	}
+
+	err = os.Remove(path)
+	if err != nil {
+		return
+	}
+
+	path = path[:strings.LastIndex(path, "/")]
+	cleanDirs(path)
 }
