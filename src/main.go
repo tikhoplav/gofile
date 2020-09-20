@@ -9,11 +9,13 @@ func main() {
 	var port int
 	var maxFileSize int64
 	var host, rootDir string
+	var showIndex bool
 
 	flag.StringVar(&host, "h", "", "Host to bind a server")
 	flag.IntVar(&port, "p", 80, "Port to bind a server")
 	flag.Int64Var(&maxFileSize, "m", 5<<10, "Maximum file size in Kb")
 	flag.StringVar(&rootDir, "d", "/data", "Root file storage directory")
+	flag.BoolVar(&showIndex, "i", true, "Allow to show directory index")
 
 	f := "Starting server at %s:%v\n" +
 		 "File storage directory: %s\n" +
@@ -23,6 +25,7 @@ func main() {
 	server := &Server{
 		rootDir: rootDir,
 		maxFileSize: maxFileSize << 13, // Kb Converted to bits
+		showIndex: showIndex,
 	}
 
 	// Convert host and port to address string to bind server
