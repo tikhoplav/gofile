@@ -8,11 +8,11 @@ FROM golang:alpine as builder
 WORKDIR /src
 COPY ./src /src
 RUN cd /src \
-    && go test \
     && apk add --no-cache \
         git \
         gcc \
         musl-dev \
+    && go test \
     && go build -o app \
     && cp app /bin/
 
